@@ -89,12 +89,53 @@ fn pop_instruction<'a>() -> BoxedParser<'a, Instruction, ()> {
     space1(),
     segment_label(),
     space1(),
-    whole_decimal(),
-    newline_with_comment("//")
-  ).map(|output| match output {
-    (_, (_, (segment, (_, (offset, _))))) =>
-      Instruction::Pop { segment, offset }
-  })
+    whole_decimal()
+  ).and_then(|output|
+    move |input, location, state|
+      match output.clone() {
+      (_, (_, (segment, (_, offset)))) =>
+        match segment {
+          Segment::Constant =>
+            ParseResult::ParseErr {
+              message: format!("You can't store a popped value into a constant.\nTry pushing a constant onto the stack using `push constant {}` or consider push/pop other memory segments like `local` and `argument`.", offset),
+              from: Location {
+                col: 1,
+                ..location
+              },
+              to: location,
+              state,
+            },
+          Segment::Pointer =>
+            if offset > 1 {
+              ParseResult::ParseErr {
+                message: format!("I found that {} is outside the allowed range of pointers.\nYou can only push/pop pointer 0 or 1. Pointer 0 refers to `this` and pointer 1 refers to `that`.", offset),
+                from: Location {
+                  col: 1,
+                  ..location
+                },
+                to: location,
+                state,
+              }
+            } else {
+              ParseResult::ParseOk {
+                input,
+                output: Instruction::Pop { segment, offset },
+                location,
+                state,
+              }
+            }
+          _ =>
+            ParseResult::ParseOk {
+              input,
+              output: Instruction::Pop { segment, offset },
+              location,
+              state,
+            }
+        }
+      }
+  ).and_then(|output|
+    newline_with_comment("//").map(move |_| output.clone())
+  )
 }
 
 fn arith_instruction<'a>() -> BoxedParser<'a, Instruction, ()> {

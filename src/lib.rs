@@ -1,4 +1,12 @@
 mod vm_parser;
+mod vm_emitter;
+
+pub fn compile(program_name: &str, source: &str) -> Result<String, String>
+{
+  vm_parser::parse(source).map(
+    |instructions| vm_emitter::emit(program_name, instructions)
+  )
+}
 
 #[cfg(test)]
 mod test {
