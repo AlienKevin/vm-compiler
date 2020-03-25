@@ -1,0 +1,9 @@
+[package]
+name = "vm-compiler-cli"
+version = "0.1.0"
+authors = ["Kevin Li <kevinli020508@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+vm-compiler = { version = "0.1.0", path = "../" }
+clap = "2.33.0"

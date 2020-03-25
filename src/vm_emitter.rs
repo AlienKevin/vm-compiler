@@ -4,7 +4,8 @@ pub fn emit(program_name: &str, instructions: Vec<Instruction>) -> String {
   instructions
     .iter()
     .filter(|instruction| match instruction { Instruction::Ignored => false, _ => true } )
-    .map(|instruction| match instruction {
+    .enumerate()
+    .map(|(instruction_index, instruction)| match instruction {
       Instruction::Arithmetic(arith_instruction) =>
         match arith_instruction {
           ArithInstruction::Add =>
@@ -12,48 +13,15 @@ pub fn emit(program_name: &str, instructions: Vec<Instruction>) -> String {
           ArithInstruction::Sub =>
             emit_binary_arithmetic("M=M-D"),
           ArithInstruction::Eq =>
-            emit_binary_arithmetic(
-"D=M-D
-@EQ
-D;JEQ
-@SP
-M=0
-@NOT_EQ
-0;JMP
-(EQ)
-@SP
-M=1
-(NOT_EQ)"),
+            emit_comparison(instruction_index, "EQ"),
           ArithInstruction::Gt =>
-            emit_binary_arithmetic(
-"D=M-D
-@GT
-D;JGT
-@SP
-M=0
-@NOT_GT
-0;JMP
-(GT)
-@SP
-M=1
-(NOT_GT)"),
+            emit_comparison(instruction_index, "GT"),
           ArithInstruction::Lt =>
-            emit_binary_arithmetic(
-"D=M-D
-@LT
-D;JLT
-@SP
-M=0
-@NOT_LT
-0;JMP
-(LT)
-@SP
-M=1
-(NOT_LT)"),
+            emit_comparison(instruction_index, "LT"),
           ArithInstruction::And =>
-            emit_binary_arithmetic("D=D&M"),
+            emit_binary_arithmetic("M=D&M"),
           ArithInstruction::Or =>
-            emit_binary_arithmetic("D=D|M"),
+            emit_binary_arithmetic("M=D|M"),
           ArithInstruction::Neg =>
             emit_unary_arithmetic("M=-M"),
           ArithInstruction::Not =>
@@ -117,6 +85,27 @@ A=M
 M=M+1", operation_str)
 }
 
+fn emit_comparison(instruction_index: usize, operation_str: &str) -> String {
+  let comp_success_label = &format!("{}_{}", operation_str, instruction_index);
+  let comp_failure_label = &format!("NOT_{}_{}", operation_str, instruction_index);
+  let jump_instruction = &format!("J{}", operation_str);
+  emit_binary_arithmetic(&format!(
+"D=M-D
+@{}
+D;{}
+@SP
+A=M
+M=0
+@{}
+0;JMP
+({})
+@SP
+A=M
+M=-1
+({})", comp_success_label, jump_instruction, comp_failure_label, comp_success_label, comp_failure_label),
+  )
+}
+
 fn emit_unary_arithmetic(operation_str: &str) -> String {
   format!(
 "@SP
@@ -165,8 +154,6 @@ fn emit_push_static_segment(file_name: &str, offset: &usize) -> String {
   format!(
 "@{}.{}
 D=M
-A=D
-D=M
 {}", file_name, offset, emit_push_d_to_stack())
 }
 
@@ -178,17 +165,34 @@ M=D", emit_pop_stack_to_d(), file_name, offset)
 }
 
 fn emit_push_temp_segment(offset: &usize) -> String {
-  emit_push_fixed_segment("5", offset)
+format!("@5
+D=A
+@{}
+D=D+A
+A=D
+D=M
+{}", offset, emit_push_d_to_stack())
 }
 
 fn emit_pop_temp_segment(offset: &usize) -> String {
-  emit_pop_fixed_segment("5", offset)
+format!(
+"@5
+D=A
+@{}
+D=D+A
+@SP
+M=M-1
+A=M
+D=D+M
+@SP
+A=M
+A=D-M
+M=D-A", offset)
 }
 
 fn emit_push_pointer_segment(offset: &usize) -> String {
   format!(
 "@{}
-A=M
 D=M
 {}", if *offset == 0 { "THIS" } else { "THAT" }, emit_push_d_to_stack())
 }

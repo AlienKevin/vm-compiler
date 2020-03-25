@@ -147,7 +147,7 @@ fn arith_instruction<'a>() -> BoxedParser<'a, Instruction, ()> {
       token("eq").map(|_| ArithInstruction::Eq),
       token("gt").map(|_| ArithInstruction::Gt),
       token("lt").map(|_| ArithInstruction::Lt),
-      token("and").map(|_| ArithInstruction::Add),
+      token("and").map(|_| ArithInstruction::And),
       token("or").map(|_| ArithInstruction::Or),
       token("not").map(|_| ArithInstruction::Not)
     ).map(|output| Instruction::Arithmetic(output)),
