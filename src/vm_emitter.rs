@@ -67,6 +67,12 @@ pub fn emit(program_name: &str, instructions: Vec<Instruction>) -> String {
         },
       Instruction::Ignored =>
         panic!("The emitter should not encountered Ignored instructions.\nThere's either a problem in the emitter or Rust."),
+      Instruction::Label(label) =>
+        emit_label(label),
+      Instruction::Goto(label) =>
+        emit_goto(label),
+      Instruction::IfGoto(label) =>
+        emit_if_goto(label),
     }).collect::<Vec<String>>()
     .join("\n")
 }
@@ -220,4 +226,24 @@ fn emit_pop_stack_to_d() -> &'static str {
 M=M-1
 A=M
 D=M"
+}
+
+fn emit_label(label: &str) -> String {
+format!("({})", label)
+}
+
+fn emit_goto(label: &str) -> String {
+format!(
+"@{}
+0;JMP", label)
+}
+
+fn emit_if_goto(label: &str) -> String {
+format!(
+"@SP
+M=M-1
+A=M
+D=M
+@{}
+D;JGT", label)
 }
