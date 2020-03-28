@@ -2,6 +2,7 @@ use lip::*;
 use im::hashset::HashSet;
 use std::hash::{Hash};
 use itertools::Itertools;
+use lazy_static::lazy_static;
 
 #[derive(Hash, Clone, Eq, PartialEq, Debug)]
 struct VMLocation {
@@ -64,6 +65,10 @@ pub struct State {
   used_labels: HashSet<VMLocatedString>,
 }
 
+lazy_static! {
+  static ref RESERVED_WORDS: std::collections::HashSet<String> = std::collections::HashSet::new();
+}
+
 // // Executes pop and push commands using the virtual memory segments.
 // push constant 10
 // pop local 0
@@ -73,20 +78,20 @@ pub fn parse<'a>(source: &'a str) -> Result<Vec<Instruction>, String> {
     defined_labels: HashSet::new(),
     used_labels: HashSet::new(),
   };
-  let output = one_or_more_till_end(
+  let output = one_or_more(
     left(
       one_of!(
         push_instruction(),
         pop_instruction(),
         arith_instruction(),
-        label_instruction(),
+        label_declaration(),
         goto_instruction(),
         if_goto_instruction(),
         comment_or_spaces()
       ),
       newline_with_comment("//")
     )
-  ).parse(source, Location { row: 1, col: 1 }, initial_state)
+  ).end().parse(source, Location { row: 1, col: 1 }, initial_state)
   .map(| instructions |
     instructions.into_iter().filter(|instruction| match instruction { Instruction::Ignored => false, _ => true } ).collect()
   );
@@ -141,7 +146,7 @@ fn push_instruction<'a>() -> BoxedParser<'a, Instruction, State> {
     space1(),
     segment_label(),
     space1(),
-    whole_decimal()
+    int()
   ).map(|output| match output {
     (_, (_, (segment, (_, offset)))) =>
       Instruction::Push { segment, offset }
@@ -154,7 +159,7 @@ fn pop_instruction<'a>() -> BoxedParser<'a, Instruction, State> {
     space1(),
     segment_label(),
     space1(),
-    whole_decimal()
+    int()
   ).and_then(|output|
     move |input, location, state|
       match output.clone() {
@@ -216,7 +221,7 @@ fn arith_instruction<'a>() -> BoxedParser<'a, Instruction, State> {
 }
 
 // label LOOP_START
-fn label_instruction<'a>() -> BoxedParser<'a, Instruction, State> {
+fn label_declaration<'a>() -> BoxedParser<'a, Instruction, State> {
   chain!(
     token("label"),
     space1(),
@@ -248,38 +253,13 @@ fn label_instruction<'a>() -> BoxedParser<'a, Instruction, State> {
   })
 }
 
-pub fn label<'a>() -> BoxedParser<'a, String, State> {
-  one_or_more(
-    any_char().pred(
-    | character |
-      character.is_alphanumeric() || *character == '_' || *character == '.' || *character == '$'
-    , "a goto label like `LOOP_ONE` or `ponggame.run$if_end1`"
-    )
-  ).and_then(
-    | characters | {
-      let label = characters.iter().collect::<String>();
-      if label.starts_with("_") || label.ends_with("_") || label.contains("__")
-        || label.starts_with(".") || label.ends_with(".") || label.contains("..")
-        || label.starts_with("$") || label.ends_with("$") || label.contains("$$") {
-        BoxedParser::new(move | _input, location: Location, state |
-          ParseResult::Err {
-            message: "I'm expecting an all-caps goto label like LOOP_ONE".to_string(),
-            from: Location {
-              col: location.col - label.len(),
-              ..location
-            },
-            to: location,
-            state,
-          }
-        )
-      } else {
-        BoxedParser::new(move | input, location, state |
-          ParseResult::Ok {
-            input, location, output: label.clone(), state,
-          }
-        )
-      }
-    }
+pub fn label<'a>() -> impl Parser<'a, String, State> {
+  variable(
+    &(|c: &char| c.is_alphabetic()),
+    &(|c: &char| c.is_alphanumeric()),
+    &(|c: &char| *c == '_' || *c == '.' || *c == '$'),
+    &RESERVED_WORDS,
+    "a goto label like `LOOP_ONE` or `ponggame.run$if_end1`"
   )
 }
 
