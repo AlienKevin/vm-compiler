@@ -102,29 +102,20 @@ pub fn parse<'a>(source: &'a str) -> Result<Vec<Instruction>, String> {
       let used_labels = state.used_labels;
       let used_label_names = used_labels.clone().into_iter().map(|located_label| located_label.value).collect::<HashSet<String>>();
       let label_name_difference = defined_label_names.difference(used_label_names);
-      let label_difference = defined_labels.clone().into_iter().filter(|located_label|
+      let label_difference = used_labels.into_iter().filter(|located_label|
         label_name_difference.contains(&located_label.value)
-      ).collect::<HashSet<VMLocatedString>>().union(
-        used_labels.into_iter().filter(|located_label|
-          label_name_difference.contains(&located_label.value)
-        ).collect::<HashSet<VMLocatedString>>());
+        ).collect::<HashSet<VMLocatedString>>();
       if label_difference.is_empty() {
         Ok(output)
       } else {
         Err(
-          label_difference.iter().sorted_by_key(|located_label| located_label.from.row).map(|located_label|
+          label_difference.iter().sorted_by_key(|located_label| located_label.from.row)
+          .map(|located_label|
             display_error(source, 
-              if defined_labels.contains(located_label) {
-                format!(
-                  "I found an unused label named {}. Try removing it or use it somewhere.",
-                  located_label.value
-                )
-              } else {
                 format!(
                   "I found an undefined label named {}. Try removing it or define it somewhere.",
                   located_label.value
-                )
-              },
+            ),
               to_location(located_label.from.clone()), to_location(located_label.to.clone())
             )
           ).collect::<Vec<String>>().join("\n\n")
