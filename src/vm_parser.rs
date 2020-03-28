@@ -31,6 +31,11 @@ pub enum Instruction {
   Label(String),
   Goto(String),
   IfGoto(String),
+  Function {
+    name: String,
+    local_vars: usize,
+  },
+  Return,
   Ignored,
 }
 
@@ -87,6 +92,8 @@ pub fn parse<'a>(source: &'a str) -> Result<Vec<Instruction>, String> {
         label_declaration(),
         goto_instruction(),
         if_goto_instruction(),
+        function_declaration(),
+        return_statement(),
         comment_or_spaces()
       ),
       newline_with_comment("//")
@@ -112,11 +119,11 @@ pub fn parse<'a>(source: &'a str) -> Result<Vec<Instruction>, String> {
           label_difference.iter().sorted_by_key(|located_label| located_label.from.row)
           .map(|located_label|
             display_error(source, 
-                format!(
-                  "I found an undefined label named {}. Try removing it or define it somewhere.",
-                  located_label.value
+            format!(
+              "I found an undefined label named {}. Try removing it or define it somewhere.",
+              located_label.value
             ),
-              to_location(located_label.from.clone()), to_location(located_label.to.clone())
+            to_location(located_label.from.clone()), to_location(located_label.to.clone())
             )
           ).collect::<Vec<String>>().join("\n\n")
         )
@@ -244,13 +251,13 @@ fn label_declaration<'a>() -> BoxedParser<'a, Instruction, State> {
   })
 }
 
-pub fn label<'a>() -> impl Parser<'a, String, State> {
+fn label<'a>() -> impl Parser<'a, String, State> {
   variable(
     &(|c: &char| c.is_alphabetic()),
     &(|c: &char| c.is_alphanumeric()),
     &(|c: &char| *c == '_' || *c == '.' || *c == '$'),
     &RESERVED_WORDS,
-    "a goto label like `LOOP_ONE` or `ponggame.run$if_end1`"
+    "a label like `LOOP_ONE` or `ponggame.run$if_end1`"
   )
 }
 
@@ -290,6 +297,47 @@ fn if_goto_instruction<'a>() -> BoxedParser<'a, Instruction, State> {
         }
       }
   })
+}
+
+fn function_declaration<'a>() -> BoxedParser<'a, Instruction, State> {
+  chain!(
+    token("function"),
+    space1(),
+    located(label()),
+    space1(),
+    int()
+  ).update(|input, output, location, state| match output {
+    (_, (_, (label, (_, local_vars)))) =>
+      if state.defined_labels.iter().map(|located_label| located_label.value.clone())
+        .collect::<HashSet<String>>().contains(&label.value) {
+        ParseResult::Err {
+          message: format!("I found a duplicated label name `{}`. Try renaming it.", &label.value),
+          from: Location {
+            col: location.col - label.value.len(),
+            ..location
+          },
+          to: location,
+          state,
+        }
+      } else {
+        ParseResult::Ok {
+          input,
+          output: Instruction::Function {
+            name: label.value.clone(),
+            local_vars,
+          },
+          location,
+          state: State {
+            defined_labels: state.defined_labels.update(to_vmlocated_string(label)),
+            ..state
+          }
+        }
+      }
+  })
+}
+
+fn return_statement<'a>() -> BoxedParser<'a, Instruction, State> {
+  token("return").map(|_| Instruction::Return)
 }
 
 fn to_vmlocated_string(located_str: Located<String>) -> VMLocatedString {

@@ -73,6 +73,10 @@ pub fn emit(program_name: &str, instructions: Vec<Instruction>) -> String {
         emit_goto(label),
       Instruction::IfGoto(label) =>
         emit_if_goto(label),
+      Instruction::Function { name, local_vars } =>
+        emit_function(name, *local_vars),
+      Instruction::Return =>
+        emit_return(),
     }).collect::<Vec<String>>()
     .join("\n")
 }
@@ -246,4 +250,74 @@ A=M
 D=M
 @{}
 D;JGT", label)
+}
+
+// (function_label)
+// repeat local_vars:
+//   push 0
+fn emit_function(name: &str, local_vars: usize) -> String {
+format!(
+"({})
+@SP
+{}", name, std::iter::repeat("M=M+1").take(local_vars).collect::<Vec<&str>>().join("\n"))
+}
+
+// endFrame = LCL
+// retAddr = *(endFrame - 5)
+// *ARG = pop()
+// SP = ARG + 1
+// THAT = *(endFrame - 1)
+// THIS = *(endFrame - 2)
+// ARG = *(endFrame - 3)
+// LCL = *(endFrame - 4)
+fn emit_return() -> String {
+format!(
+"@LCL
+D=M
+@R13
+M=D
+D=D-1
+D=D-1
+D=D-1
+D=D-1
+D=D-1
+A=D
+D=M
+@R14
+M=D
+{}
+@ARG
+A=M
+M=D
+@ARG
+D=M
+@SP
+M=D+1
+@R13
+M=M-1
+A=M
+D=M
+@THAT
+M=D
+@R13
+M=M-1
+A=M
+D=M
+@THIS
+M=D
+@R13
+M=M-1
+A=M
+D=M
+@ARG
+M=D
+@R13
+M=M-1
+A=M
+D=M
+@LCL
+M=D
+@R14
+A=M
+0;JMP", emit_pop_stack_to_d())
 }
